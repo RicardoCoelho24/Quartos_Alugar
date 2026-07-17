@@ -1,10 +1,15 @@
 import requests
 from bs4 import BeautifulSoup
-import sqlite3
+import psycopg2
+import os
 
 def configurar_bd():
-    conexao = sqlite3.connect('quartos_vistos.db')
+    # Vai buscar o link secreto ao .env (local) ou ao Render (nuvem)
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    conexao = psycopg2.connect(DATABASE_URL)
     cursor = conexao.cursor()
+    
+    # Cria a tabela na nuvem se ela ainda não existir
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS anuncios (
             id TEXT PRIMARY KEY
@@ -14,11 +19,12 @@ def configurar_bd():
     return conexao, cursor
 
 def verificar_se_novo(cursor, id_anuncio):
-    cursor.execute('SELECT id FROM anuncios WHERE id = ?', (id_anuncio,))
+    cursor.execute('SELECT id FROM anuncios WHERE id = %s', (id_anuncio,))
     return cursor.fetchone() is None
 
 def guardar_id(conexao, cursor, id_anuncio):
-    cursor.execute('INSERT INTO anuncios (id) VALUES (?)', (id_anuncio,))
+    # Guarda o ID e ignora se por acaso já lá estiver (evita erros)
+    cursor.execute('INSERT INTO anuncios (id) VALUES (%s) ON CONFLICT DO NOTHING', (id_anuncio,))
     conexao.commit()
 
 def procurar_quartos_olx(cidade, preco_maximo):
@@ -64,6 +70,7 @@ def procurar_quartos_olx(cidade, preco_maximo):
     except Exception as e:
         print(f"Erro a pesquisar no OLX: {e}")
     finally:
+        cursor.close()
         conexao.close()
 
     return quartos_encontrados
