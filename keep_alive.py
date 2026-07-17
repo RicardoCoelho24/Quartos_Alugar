@@ -3,21 +3,25 @@ import threading
 import os
 
 class Handler(BaseHTTPRequestHandler):
+    # Responde quando se abre a página no navegador
     def do_GET(self):
-        # Esta é a resposta que o Render vai ler para saber que está tudo OK
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
         self.wfile.write(b"O Bot dos Quartos esta vivo e a correr!")
 
+    # Responde quando o UptimeRobot "bate à porta" furtivamente
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+
 def run():
-    # O Render exige que usemos a porta que eles nos dão na variável PORT
     port = int(os.environ.get('PORT', 8080))
     server = HTTPServer(('0.0.0.0', port), Handler)
     server.serve_forever()
 
 def manter_vivo():
-    # Corre o servidor fantasma numa thread secundária para não bloquear o bot
     t = threading.Thread(target=run)
     t.daemon = True
     t.start()
