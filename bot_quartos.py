@@ -8,7 +8,8 @@ from keep_alive import manter_vivo
 # Carrega as variáveis do ficheiro .env para uso local
 load_dotenv()
 
-CIDADE, PRECO = range(2)
+# Adicionámos o estado GENERO à conversa
+CIDADE, PRECO, GENERO = range(3)
 
 async def iniciar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia a conversa e mostra os botões de TODAS as regiões oficiais do OLX."""
@@ -54,25 +55,55 @@ async def receber_preco(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Por favor, insere apenas números inteiros (ex: 250).")
         return PRECO
     
+    # Guarda o preço e passa para a pergunta do género
+    context.user_data['preco'] = preco_escolhido
+    
+    keyboard = [
+        [InlineKeyboardButton("👦 Apenas Rapazes", callback_data='rapaz')],
+        [InlineKeyboardButton("👧 Apenas Raparigas", callback_data='rapariga')],
+        [InlineKeyboardButton("👫 Misto / Qualquer", callback_data='qualquer')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "Perfeito! E o quarto destina-se a quem?",
+        reply_markup=reply_markup
+    )
+    return GENERO
+
+async def receber_genero(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    genero_escolhido = query.data
+    
     cidade = context.user_data['cidade']
+    preco_escolhido = context.user_data['preco']
     chat_id = update.effective_chat.id
     
-    await update.message.reply_text(
-        f"Tudo configurado! ✅\n"
-        f"A partir de agora, vou vigiar a zona selecionada até **{preco_escolhido}€** a cada 5 minutos e envio-te uma mensagem assim que sair um quarto novo."
+    # Prepara o nome de exibição bonito para a mensagem final
+    nomes_genero = {'rapaz': '👦 Rapaz', 'rapariga': '👧 Rapariga', 'qualquer': '👫 Misto / Qualquer'}
+    nome_display = nomes_genero[genero_escolhido]
+    
+    await query.edit_message_text(
+        f"Tudo configurado! ✅\n\n"
+        f"📍 **Região:** {cidade.capitalize()}\n"
+        f"💰 **Preço Máx:** {preco_escolhido}€\n"
+        f"👤 **Filtro:** {nome_display}\n\n"
+        f"A partir de agora, vou vigiar a zona selecionada a cada 5 minutos e envio-te uma mensagem assim que sair um quarto compatível."
     )
     
     trabalhos_antigos = context.job_queue.get_jobs_by_name(str(chat_id))
     for trabalho in trabalhos_antigos:
         trabalho.schedule_removal()
         
+    # Agora passamos os 3 parâmetros para o job (cidade, preco, genero)
     context.job_queue.run_repeating(
         procurar_automaticamente, 
         interval=300, 
         first=1, 
         chat_id=chat_id,
         name=str(chat_id), 
-        data={'cidade': cidade, 'preco': preco_escolhido} 
+        data={'cidade': cidade, 'preco': preco_escolhido, 'genero': genero_escolhido} 
     )
     
     return ConversationHandler.END
@@ -81,8 +112,10 @@ async def procurar_automaticamente(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     cidade = job.data['cidade']
     preco = job.data['preco']
+    genero = job.data['genero']
     
-    resultados = scraper_olx.procurar_quartos_olx(cidade, preco)
+    # Enviamos a nova variável de género para o motor de busca do OLX
+    resultados = scraper_olx.procurar_quartos_olx(cidade, preco, genero)
     
     if resultados:
         for quarto_mensagem in resultados:
@@ -99,7 +132,6 @@ async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 def main():
-    # Lê a variável de ambiente (escondida do código público)
     TOKEN = os.getenv("TELEGRAM_TOKEN")
     
     if not TOKEN:
@@ -116,6 +148,8 @@ def main():
         states={
             CIDADE: [CallbackQueryHandler(receber_cidade)],
             PRECO: [MessageHandler(filters.TEXT & ~filters.COMMAND, receber_preco)],
+            # Novo estado mapeado aqui
+            GENERO: [CallbackQueryHandler(receber_genero)],
         },
         fallbacks=[CommandHandler('cancel', cancelar)],
     )
