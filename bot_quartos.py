@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 import scraper_olx
+from keep_alive import manter_vivo
 
 # Carrega as variáveis do ficheiro .env para uso local
 load_dotenv()
@@ -105,6 +106,8 @@ def main():
         print("🚨 ERRO CRÍTICO: Não encontraste o Token do Telegram!")
         print("Garante que o ficheiro .env existe e contém TELEGRAM_TOKEN=o_teu_token")
         return
+    
+    manter_vivo()
     
     application = Application.builder().token(TOKEN).connect_timeout(30).read_timeout(30).write_timeout(30).pool_timeout(30).build()
 
